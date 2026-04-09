@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BHC Skills">
+<meta name="theme-color" content="#F5C500">
+<title>BHC Skills Tracker</title>
+<link rel="manifest" href="https://dmalthouse.github.io/bhc-skills-app/manifest.json">
+<link rel="apple-touch-icon" href="https://dmalthouse.github.io/bhc-skills-app/icon.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{background:#111;display:flex;justify-content:center;font-family:Georgia,serif;-webkit-font-smoothing:antialiased}
+#root{width:100%;max-width:440px;height:100vh;overflow-y:auto;overflow-x:hidden;background:#F8F9FF;position:relative;-webkit-overflow-scrolling:touch}
+button{cursor:pointer;border:none;font-family:Georgia,serif}
+input{outline:none;font-family:Georgia,serif}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shimmer{0%,100%{opacity:0}50%{opacity:1}}
+.shimmer{position:fixed;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,0.04) 50%,transparent 60%);pointer-events:none;z-index:9999;animation:shimmer 5s ease-in-out infinite}
+.fade{animation:fadeUp 0.3s ease both}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('https://dmalthouse.github.io/bhc-skills-app/sw.js',{scope:'https://dmalthouse.github.io/bhc-skills-app/'})
+      .then(r=>console.log('SW registered'))
+      .catch(e=>console.log('SW error',e));
+  });
+}
+
+const {useState,useEffect,useRef,useCallback,createElement:h,Fragment} = React;
+
+const Y="#F5C500",YD="#D4A900",BL="#003087",BD="#001f5b",BM="#0040a8",WH="#FFFFFF",OF="#F8F9FF",TX="#111827",TL="#6b7280",RD="#dc2626",GR="#16a34a",OR="#ea580c";
+
+function lsGet(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
+
+const AREAS=[
+  {id:"receiving",name:"Receiving",icon:"🤲",color:"#0ea5e9",skills:[
+    {id:"fh_static",name:"FH Trap — Stationary",level:1,why:"The foundation of everything. If you can't stop a ball cleanly on your forehand, nothing else can be built.",test:"Feeder rolls 10 balls from 5m. Trap each ball dead on the forehand side. Ball must not travel more than 30cm.",testType:"outcomes",attempts:10,outcomes:[{label:"Dead stop (within 30cm)",pts:10,color:GR,icon:"✅"},{label:"Controlled (within 1m)",pts:6,color:OR,icon:"⚠️"},{label:"Lost / rebounded",pts:0,color:RD,icon:"❌"}],criteria:["3–4 balls trapped cleanly","5–6 trapped, stick angle improving","7–8 within 30cm, good body shape","9 cleanly, head up after trap","All 10 — instant control, ready for next action"]},
+    {id:"fh_moving",name:"FH Trap — Moving Ball",level:1,why:"A player who can only trap a stationary ball has to slow the game down every time they receive.",test:"Player jogs between two cones 10m apart. Feeder passes a moving ball mid-run. Trap and control without stopping. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Controlled, no break in run",pts:10,color:GR,icon:"✅"},{label:"Controlled, slight slowdown",pts:6,color:OR,icon:"⚠️"},{label:"Lost control",pts:0,color:RD,icon:"❌"}],criteria:["Controls 3–4, slows significantly","Controls 5–6, moderate pace","Controls 7–8, continues at good pace","Controls 9, ball into stride immediately","All 10 — seamless, no loss of pace"]},
+    {id:"soft_hands",name:"Soft Hands",level:1,why:"A rigid stick causes the ball to rebound. Soft hands absorbs pace and kills the ball dead.",test:"Feeder hits firm passes from 10m. Give with the stick on contact. Ball must stop within 50cm. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Absorbed within 50cm",pts:10,color:GR,icon:"✅"},{label:"Stopped within 1m",pts:5,color:OR,icon:"⚠️"},{label:"Rebounded away",pts:0,color:RD,icon:"❌"}],criteria:["4/10 absorbed","6/10 within 50cm","7–8/10 ball stays close","9/10 ball dies on stick","All 10 regardless of incoming pace"]},
+    {id:"fh_pressure",name:"FH Trap Under Pressure",level:2,why:"Controlling a ball with a defender closing is what actually matters in a match.",test:"Stationary trap but passive defender stands 2m away and moves to pressure immediately. No tackling. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Retained and played out",pts:10,color:GR,icon:"✅"},{label:"Retained but shaky",pts:5,color:OR,icon:"⚠️"},{label:"Lost possession",pts:0,color:RD,icon:"❌"}],criteria:["Retains 4/10","Controls 6–7, body shields","Controls 7–8, shields and looks to play","Controls 9, plays out quickly","All 10 — calm, shielded, decisive"]},
+    {id:"rev_static",name:"Rev Trap — Stationary",level:2,why:"The reverse gap is the most important diagnostic. Most players score 20+ points lower here.",test:"Ball delivered to reverse side. Rotate stick and trap cleanly within 40cm. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Dead stop (within 40cm)",pts:10,color:GR,icon:"✅"},{label:"Controlled (within 1m)",pts:5,color:OR,icon:"⚠️"},{label:"Lost / rebounded",pts:0,color:RD,icon:"❌"}],criteria:["3–4 controlled, rotation present","5–6, stick angle improving","7–8, consistent reverse technique","9, confident and clean","All 10 — reverse as reliable as forehand"]},
+    {id:"one_touch",name:"One-Touch FH Release",level:3,why:"Receiving and releasing in a single movement removes a touch, accelerates play, and is nearly impossible to defend.",test:"Ball played to player. In a single movement receive and release to a target. No second touch. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"On target, good weight",pts:10,color:GR,icon:"✅"},{label:"On target, poor weight",pts:5,color:OR,icon:"⚠️"},{label:"Off target or second touch",pts:0,color:RD,icon:"❌"}],criteria:["4/10 releases on time","6/10 direction correct","7–8/10 quick release, good weight","9/10 defender has no time to react","All 10 — first-time quality every direction"]},
+  ]},
+  {id:"passing",name:"Passing",icon:"🏒",color:"#3b82f6",skills:[
+    {id:"push_short",name:"Push Pass — Short",level:1,why:"The most common pass in hockey. No backswing, quick release. Can't do this reliably and you'll give the ball away under any pressure.",test:"Push pass to a 1m-wide target gate at 10m. No backswing. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Through the gate",pts:10,color:GR,icon:"✅"},{label:"Within 1m of gate",pts:4,color:OR,icon:"⚠️"},{label:"Miss",pts:0,color:RD,icon:"❌"}],criteria:["3–4 through gate","5–6, good weight","7–8, consistent technique","9, varies pace on demand","All 10 — accurate, weighted, quick release"]},
+    {id:"push_long",name:"Push Pass — Long",level:1,why:"Faster to release than a hit. 20m push range opens attacking options a short-range-only player can't access.",test:"Push pass to a 1.5m target zone at 20m. Stick stays in contact through release. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"In target zone",pts:10,color:GR,icon:"✅"},{label:"Within 2m of zone",pts:4,color:OR,icon:"⚠️"},{label:"Short or wide",pts:0,color:RD,icon:"❌"}],criteria:["3–4 reach zone","5–6, accurate at distance","7–8, flat and accurate","9, useful in real game","All 10 — reliable long push weapon"]},
+    {id:"push_pressure",name:"Push Under Pressure",level:1,why:"Speed of release under pressure is as important as accuracy.",test:"Receive ball with defender closing from 3m. Release push pass to target before defender arrives. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Released before pressure",pts:10,color:GR,icon:"✅"},{label:"Released but hurried",pts:5,color:OR,icon:"⚠️"},{label:"Lost or too slow",pts:0,color:RD,icon:"❌"}],criteria:["4/10 before pressure","6/10 accurate and quick","7–8 decisions and technique both good","9 never panics","All 10 — composed under any pressure"]},
+    {id:"rev_push",name:"Reverse Push Pass",level:2,why:"A one-directional player is predictable. The reverse push opens the left side.",test:"Push pass using reverse grip to a 1m gate at 8m to your left. Stick must stay low. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Through gate",pts:10,color:GR,icon:"✅"},{label:"Within 1m of gate",pts:4,color:OR,icon:"⚠️"},{label:"Miss",pts:0,color:RD,icon:"❌"}],criteria:["3–4 through gate","5–6, reasonable accuracy","7–8, good pace","9, reliable weapon","All 10 — reverse as accurate as forehand"]},
+    {id:"fh_hit_short",name:"Forehand Hit — Short",level:2,why:"The hit gives range and pace beyond what a push can achieve.",test:"Hit pass to a 1m gate at 15m. Short backswing. Foot in line with ball. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Through gate, flat",pts:10,color:GR,icon:"✅"},{label:"Through gate, rising",pts:5,color:OR,icon:"⚠️"},{label:"Miss or over bar",pts:0,color:RD,icon:"❌"}],criteria:["4 through gate","6, flat contact","7–8, power and accuracy combined","9, ball stays low","All 10 — reliable technique"]},
+    {id:"fh_hit_long",name:"Forehand Hit — Long",level:2,why:"Switching play with a long hit is one of the most damaging things a team can do.",test:"Full forehand hit to a 2m target zone at 30m+. Full backswing. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"In target zone, flat",pts:10,color:GR,icon:"✅"},{label:"Reaches zone, rising",pts:4,color:OR,icon:"⚠️"},{label:"Short, wide or ballooned",pts:0,color:RD,icon:"❌"}],criteria:["3–4 reach zone","5–6, accurate at distance","7–8, flat across pitch","9, genuine attacking weapon","All 10 — changes games"]},
+    {id:"slap_pass",name:"Slap Pass",level:3,why:"Between push and hit — no foot repositioning needed. Devastating when time is tight.",test:"Slap pass to a 1m gate at 20m. Stick stays in contact with ground. No foot movement during swing. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"Through gate",pts:10,color:GR,icon:"✅"},{label:"Near miss",pts:4,color:OR,icon:"⚠️"},{label:"Miss",pts:0,color:RD,icon:"❌"}],criteria:["4 through gate","6, stays low","7–8, real pace","9, faster release than hit","All 10 — a true weapon"]},
+  ]},
+  {id:"dribbling",name:"Dribbling",icon:"⚡",color:"#f59e0b",skills:[
+    {id:"fh_carry",name:"FH Carry — Basic",level:1,why:"Ball under control, forehand only. If this isn't reliable, nothing more complex can be built.",test:"Carry ball at comfortable pace for 20m forehand only. Ball must stay within 1m of stick. 5 runs.",testType:"timed",timeLabel:"Best time over 20m (seconds)",timeBands:[{label:"Under 4.0s",max:4.0,score:100},{label:"4.0–4.5s",max:4.5,score:80},{label:"4.5–5.5s",max:5.5,score:60},{label:"5.5–7.0s",max:7.0,score:40},{label:"Over 7.0s",max:999,score:20}],criteria:["Completes run, occasional loss of control","Consistent, moderate pace","Good pace, ball always controlled","Fast, head up, ready to pass","Full pace, head up, 2 o'clock position — first team standard"]},
+    {id:"fh_slalom",name:"FH Slalom",level:1,why:"Ball control under directional pressure. Time is the measure — cones touched add penalties.",test:"Weave through 10 cones (1m apart) forehand only. Turn and return. Best of 3. Add 0.5s per cone touched.",testType:"timed",timeLabel:"Best time after penalties (seconds)",timeBands:[{label:"Under 10s",max:10.0,score:100},{label:"10–11s",max:11.0,score:80},{label:"12–13s",max:13.0,score:60},{label:"14–17s",max:17.0,score:40},{label:"18s+",max:999,score:20}],criteria:["18+ seconds","14–17 seconds","12–13 seconds","10–11 seconds","Under 10 seconds, no cones touched"]},
+    {id:"rev_carry",name:"Rev Carry — Basic",level:1,why:"The forehand/reverse gap is the key diagnostic. A player who can only dribble on the forehand is limited to one direction.",test:"Same as forehand carry but reverse stick only. Ball within 1m. 5 runs over 20m.",testType:"timed",timeLabel:"Best time over 20m (seconds)",timeBands:[{label:"Under 5.0s",max:5.0,score:100},{label:"5.0–6.0s",max:6.0,score:80},{label:"6.0–7.5s",max:7.5,score:60},{label:"7.5–9.0s",max:9.0,score:40},{label:"Over 9.0s",max:999,score:20}],criteria:["Completes 20m, frequent loss of control","Mostly in control, moderate pace","Consistent control, reasonable pace","Good pace, reverse feels natural","Matches forehand quality — no gap visible"]},
+    {id:"indian",name:"Indian Dribble",level:1,why:"Rapid alternating FH/reverse movements make it nearly impossible for a defender to predict direction.",test:"Indian dribble through a 60cm gate (4 cones). Must not touch gates. 5 runs.",testType:"outcomes",attempts:5,outcomes:[{label:"Through gate, fluid",pts:20,color:GR,icon:"✅"},{label:"Through gate, hesitant",pts:10,color:OR,icon:"⚠️"},{label:"Touched gate or failed",pts:0,color:RD,icon:"❌"}],criteria:["3/5 through, slow rotation","4/5, rhythm developing","5/5, fluent at moderate speed","5/5 at good pace, confuses passive defender","Natural at full match pace — unpredictable to defend"]},
+    {id:"rev_slalom",name:"Rev Slalom",level:2,why:"Reverse dribbling is inherently slower — the baseline reflects this. Closing the gap is the target.",test:"Same as forehand slalom but reverse stick only. Best of 3. Add 0.5s per cone touched.",testType:"timed",timeLabel:"Best time after penalties (seconds)",timeBands:[{label:"Under 12s",max:12.0,score:100},{label:"12–13s",max:13.0,score:80},{label:"14–16s",max:16.0,score:60},{label:"17–21s",max:21.0,score:40},{label:"22s+",max:999,score:20}],criteria:["22+ seconds","17–21 seconds","14–16 seconds","12–13 seconds","Under 12 seconds, no cones touched"]},
+    {id:"ball_prot",name:"Ball Protection",level:2,why:"Retaining possession when a defender arrives is often more valuable than beating them.",test:"Keep possession in a 3m×3m box against an active defender for 10 seconds. 5 attempts.",testType:"outcomes",attempts:5,outcomes:[{label:"Retained for 10 seconds",pts:20,color:GR,icon:"✅"},{label:"Retained 5–9 seconds",pts:10,color:OR,icon:"⚠️"},{label:"Lost possession",pts:0,color:RD,icon:"❌"}],criteria:["Retains 2/5","Retains 3/5","4/5, body between ball and defender","5/5, frustrates defender","5/5 — impossible to dispossess cleanly"]},
+  ]},
+  {id:"shooting",name:"Shooting",icon:"🎯",color:"#ef4444",skills:[
+    {id:"push_shot",name:"Push Shot",level:1,why:"Fastest shot to release, most common in tight spaces in the D.",test:"10 push shots at goal from top of D. Player's choice of position. No goalkeeper initially.",testType:"shooting",attempts:10,outcomes:[{label:"Corner goal ⭐",pts:10,color:GR,icon:"⭐"},{label:"Central goal",pts:7,color:"#22c55e",icon:"✅"},{label:"Post / crossbar",pts:4,color:OR,icon:"🎯"},{label:"Near miss (within 1m)",pts:2,color:"#f97316",icon:"↗️"},{label:"Miss",pts:0,color:RD,icon:"❌"}],criteria:["Score 20–34","Score 35–49","Score 50–64","Score 65–79","Score 80+ — genuine goalscoring threat"]},
+    {id:"power_shot",name:"Forehand Hit — Power",level:1,why:"A well-struck hit gives the goalkeeper far less time to react. Ball must stay low.",test:"10 forehand hit shots at goal from edge of D. Full backswing. Same scoring scale.",testType:"shooting",attempts:10,outcomes:[{label:"Corner goal ⭐",pts:10,color:GR,icon:"⭐"},{label:"Central goal",pts:7,color:"#22c55e",icon:"✅"},{label:"Post / crossbar",pts:4,color:OR,icon:"🎯"},{label:"Near miss",pts:2,color:"#f97316",icon:"↗️"},{label:"Miss or over bar",pts:0,color:RD,icon:"❌"}],criteria:["Score 20–34","Score 35–49","Score 50–64","Score 65–79","Score 80+"]},
+    {id:"slap_shot",name:"Slap Shot",level:1,why:"Quick-release shooting option when no time for a full backswing.",test:"10 slap shots on goal from a realistic game position. Foot must not move during swing.",testType:"shooting",attempts:10,outcomes:[{label:"Corner goal ⭐",pts:10,color:GR,icon:"⭐"},{label:"Central goal",pts:7,color:"#22c55e",icon:"✅"},{label:"Post / crossbar",pts:4,color:OR,icon:"🎯"},{label:"Near miss",pts:2,color:"#f97316",icon:"↗️"},{label:"Miss",pts:0,color:RD,icon:"❌"}],criteria:["Score 15–29","Score 30–44","Score 45–59","Score 60–74","Score 75+ — match-winning option"]},
+    {id:"rev_sweep",name:"Reverse Sweep",level:2,why:"Essential for players on the left side. Without it, receiving left means dribbling back before shooting — too slow.",test:"Position on left side of D. Ball to reverse side. Sweep reverse stick shot. Right knee low at contact. 10 attempts.",testType:"shooting",attempts:10,outcomes:[{label:"Corner goal ⭐",pts:10,color:GR,icon:"⭐"},{label:"Central goal",pts:7,color:"#22c55e",icon:"✅"},{label:"Post / crossbar",pts:4,color:OR,icon:"🎯"},{label:"Near miss",pts:2,color:"#f97316",icon:"↗️"},{label:"Miss",pts:0,color:RD,icon:"❌"}],criteria:["Score 10–24","Score 25–39","Score 40–54","Score 55–69","Score 70+ — genuine threat"]},
+    {id:"drag_flick",name:"Drag Flick — Basic",level:3,why:"The most technically complex shot. Primarily for short corners. Must be coached first.",test:"Ball at baseline (short corner). Drag and flick at goal — must get airborne. No goalkeeper. 10 attempts.",testType:"shooting",attempts:10,outcomes:[{label:"Corner goal ⭐",pts:10,color:GR,icon:"⭐"},{label:"On target",pts:7,color:"#22c55e",icon:"✅"},{label:"Post / bar",pts:4,color:OR,icon:"🎯"},{label:"Near miss",pts:2,color:"#f97316",icon:"↗️"},{label:"Miss or grounded",pts:0,color:RD,icon:"❌"}],criteria:["Score 10–24","Score 25–39","Score 40–54, consistent technique","Score 55–69","Score 70+ — reliable option"]},
+  ]},
+  {id:"elimination",name:"Elimination",icon:"💫",color:"#a855f7",skills:[
+    {id:"v_drag",name:"V-Drag",level:1,why:"The most versatile elimination skill. Works for defenders, midfielders and attackers. The pull-back forces the defender to commit.",test:"Pull ball back in a V shape, causing defender to commit, then accelerate past. 10 attempts vs active defender. Only counts if defender shifts weight.",testType:"outcomes",attempts:10,outcomes:[{label:"Beat defender cleanly",pts:10,color:GR,icon:"✅"},{label:"Partial — delayed defender",pts:5,color:OR,icon:"⚠️"},{label:"Failed / caught",pts:0,color:RD,icon:"❌"}],criteria:["Beats 2–3, V shape present","Beats 4–5, defender shifts weight","Beats 6–7, decisive acceleration after V","Beats 8, works both left and right","Beats 9–10 — used instinctively at the right moment"]},
+    {id:"fh_step",name:"Forehand Step",level:1,why:"The most direct elimination move. Must cause the defender to shift — running around them doesn't count.",test:"Dribble toward defender at moderate speed. Execute step to forehand side to go past. 10 attempts vs active defender.",testType:"outcomes",attempts:10,outcomes:[{label:"Beat defender cleanly",pts:10,color:GR,icon:"✅"},{label:"Partial",pts:5,color:OR,icon:"⚠️"},{label:"Failed",pts:0,color:RD,icon:"❌"}],criteria:["Beats 2–3, move recognisable","Beats 4–5, defender respects the threat","Beats 6–7, clean and explosive exit","Beats 8 at full pace","Beats 9–10 — instinctive in matches"]},
+    {id:"rev_dodge",name:"Reverse Stick Dodge",level:2,why:"A one-way eliminator is predictable. The reverse dodge makes you genuinely two-directional.",test:"Use reverse stick to take ball around defender's right side. 10 attempts vs active defender.",testType:"outcomes",attempts:10,outcomes:[{label:"Beat defender",pts:10,color:GR,icon:"✅"},{label:"Partial",pts:5,color:OR,icon:"⚠️"},{label:"Failed",pts:0,color:RD,icon:"❌"}],criteria:["Beats 2–3","Beats 4–5, defender uncertain which way","Beats 6–7, reverse as threatening as forehand","Beats 8","Beats 9–10 — truly two-directional"]},
+    {id:"lift_3d",name:"3D Lift Over Stick",level:3,why:"Turns a defender's tackle attempt into an advantage. A core part of elite modern hockey.",test:"Stick laid flat on ground. Lift ball cleanly over it and land in control. 10 attempts. Graduate to passive defender holding stick low.",testType:"outcomes",attempts:10,outcomes:[{label:"Cleared and controlled",pts:10,color:GR,icon:"✅"},{label:"Cleared, lost control on landing",pts:5,color:OR,icon:"⚠️"},{label:"Failed to clear",pts:0,color:RD,icon:"❌"}],criteria:["Clears static stick 4/10","Clears 6/10, landing controlled","Clears 8 consistently","Clears passive stick 7/10","Clears passive stick 9–10/10 — usable in a match"]},
+  ]},
+  {id:"defending",name:"Defending",icon:"🛡️",color:"#6366f1",skills:[
+    {id:"block_fh",name:"Block Tackle — FH",level:1,why:"The primary defensive technique. Technique and timing rewarded over outcome.",test:"Attacker drives through 5m channel at moderate pace. Forehand block tackle. Coach scores 1–10 per attempt. 10 reps.",testType:"coached",attempts:10,coachScale:[{label:"Excellent — clean technique, ball won",pts:10,color:GR},{label:"Good — ball won, slight error",pts:8,color:"#22c55e"},{label:"Partial — attacker delayed",pts:5,color:OR},{label:"Poor — missed or foul committed",pts:3,color:"#f97316"},{label:"No meaningful attempt",pts:0,color:RD}],criteria:["Score 20–34","Score 35–49","Score 50–64","Score 65–79","Score 80+ — clean technique, wins ball efficiently"]},
+    {id:"channelling",name:"Channelling — FH",level:1,why:"A defender who channels well may not need to tackle at all. Position beats effort.",test:"Attacker drives at you in 5m channel. Force attacker to forehand side WITHOUT tackling. Success = attacker reaches end on your right. 10 reps.",testType:"outcomes",attempts:10,outcomes:[{label:"Forced to FH side",pts:10,color:GR,icon:"✅"},{label:"Partially channelled",pts:5,color:OR,icon:"⚠️"},{label:"Wrong side or through middle",pts:0,color:RD,icon:"❌"}],criteria:["Forces FH side 4/10","6/10, body position correct","7–8, stick low, no early commitment","9, dictates exactly where attacker goes","All 10 — attacker never gets the angle they want"]},
+    {id:"jab",name:"Jab / Poke Tackle",level:1,why:"Most underused skill in club hockey. Quick poke — if it misses, you're still in position.",test:"Attacker dribbles at moderate speed. Use jab/poke tackle — quick stab, stay on feet. Coach scores 10 attempts.",testType:"coached",attempts:10,coachScale:[{label:"Excellent — ball won, stayed on feet",pts:10,color:GR},{label:"Good — disrupted, immediately recovered",pts:8,color:"#22c55e"},{label:"Partial — some disruption",pts:5,color:OR},{label:"Poor — lunged or missed badly",pts:3,color:"#f97316"},{label:"No attempt or dangerous lunge",pts:0,color:RD}],criteria:["Score 20–34","Score 35–49","Score 50–64","Score 65–79","Score 80+ — consistent weapon, always stays on feet"]},
+    {id:"marking",name:"One-on-One Marking",level:2,why:"Good marking nullifies a player before they even touch the ball.",test:"Assessed over 10 minutes in a practice game. Count how many times your marked opponent receives the ball dangerously.",testType:"count",countLabel:"How many times did your marked player receive dangerously? (lower is better)",countBands:[{label:"0 times",max:0,score:100},{label:"1–2 times",max:2,score:80},{label:"3–4 times",max:4,score:60},{label:"5–6 times",max:6,score:40},{label:"7+ times",max:999,score:20}],criteria:["7–10 times — loses mark regularly","5–6 times","3–4 — mark largely nullified","1–2 — attacker frustrated","0 — marked player completely anonymous"]},
+    {id:"press",name:"Press Trigger Recognition",level:3,why:"A press only works if everyone starts simultaneously. Missing the trigger breaks the entire defensive structure.",test:"4v4 game. Coach pre-defines 2 press triggers. Must initiate press within 1 second of trigger. 10 triggers observed.",testType:"outcomes",attempts:10,outcomes:[{label:"Press within 1 second",pts:10,color:GR,icon:"✅"},{label:"Pressed but slow (1–3s)",pts:5,color:OR,icon:"⚠️"},{label:"Missed trigger",pts:0,color:RD,icon:"❌"}],criteria:["3–4/10 correct","5–6/10, press at right time","7–8, forces turnover or rushed pass","9, reads trigger before it happens","All 10 — organises press vocally"]},
+  ]},
+  {id:"movement",name:"Movement",icon:"🏃",color:"#10b981",skills:[
+    {id:"basic_lead",name:"Basic Lead",level:1,why:"A lead that doesn't create space or a usable option isn't a lead — it's just running.",test:"In a passing drill, create space by leading to receive the ball. Coach assesses: genuine space created? Timing right? 10 situations.",testType:"coached",attempts:10,coachScale:[{label:"Excellent — genuine space, ball received",pts:10,color:GR},{label:"Good — space created, timing slightly off",pts:7,color:"#22c55e"},{label:"Partial — some separation",pts:4,color:OR},{label:"Poor — defender tracked easily",pts:1,color:"#f97316"},{label:"No lead made",pts:0,color:RD}],criteria:["3–4 create usable space","5–6, timed well enough to receive","7–8, leads create real attacking options","9, makes ball-carrier's job easy every time","All 10 — movement constantly creates options"]},
+    {id:"pre_scan",name:"Pre-Scan Before Receiving",level:2,why:"A player who scans before the ball arrives already knows where their next pass is going.",test:"Coach holds up coloured cone just before passing. Must look up, identify colour and call it out. 10 situations.",testType:"outcomes",attempts:10,outcomes:[{label:"Identified colour, directed trap correctly",pts:10,color:GR,icon:"✅"},{label:"Identified colour but trap uncontrolled",pts:5,color:OR,icon:"⚠️"},{label:"Missed scan or wrong colour",pts:0,color:RD,icon:"❌"}],criteria:["3–4/10 correct","5–6/10, scan deliberate","7–8, pre-scan becoming automatic","9, looks up before every ball","All 10 — situational awareness fully embedded"]},
+  ]},
+  {id:"set_pieces",name:"Set Pieces",icon:"📐",color:"#14b8a6",skills:[
+    {id:"injection",name:"Short Corner — Injection",level:1,why:"A poorly placed injection wastes the entire set piece.",test:"Inject ball from baseline to a 1.5m target zone at top of D. Ball must reach zone and be stoppable. 10 attempts.",testType:"outcomes",attempts:10,outcomes:[{label:"In zone, correct pace",pts:10,color:GR,icon:"✅"},{label:"In zone, wrong pace",pts:6,color:OR,icon:"⚠️"},{label:"Wide or too short/long",pts:0,color:RD,icon:"❌"}],criteria:["3–4 reach target zone","5–6, pace and direction mostly correct","7–8, stopper doesn't need to move much","9, arrives at perfect height and pace","All 10 — completely reliable injection"]},
+    {id:"sc_hit",name:"Short Corner — Hit Finish",level:1,why:"The most common short corner finish. Same technique as power shot but under time pressure.",test:"Injection played to stopper. Receive from stopper and hit at goal from top of D. No goalkeeper initially. 10 attempts.",testType:"shooting",attempts:10,outcomes:[{label:"Corner goal ⭐",pts:10,color:GR,icon:"⭐"},{label:"Central goal",pts:7,color:"#22c55e",icon:"✅"},{label:"Post / crossbar",pts:4,color:OR,icon:"🎯"},{label:"Near miss",pts:2,color:"#f97316",icon:"↗️"},{label:"Miss",pts:0,color:RD,icon:"❌"}],criteria:["Score 20–34","Score 35–49","Score 50–64","Score 65–79","Score 80+ — set piece is a goal threat"]},
+    {id:"sc_drag",name:"Short Corner — Drag Flick",level:2,why:"Alternative finish arriving at a different height — harder for the goalkeeper to read.",test:"Injection played, stopper stops ball. Drag and flick at goal. Same scoring scale. 10 attempts.",testType:"shooting",attempts:10,outcomes:[{label:"Corner goal ⭐",pts:10,color:GR,icon:"⭐"},{label:"On target",pts:7,color:"#22c55e",icon:"✅"},{label:"Post / bar",pts:4,color:OR,icon:"🎯"},{label:"Near miss",pts:2,color:"#f97316",icon:"↗️"},{label:"Miss or grounded",pts:0,color:RD,icon:"❌"}],criteria:["Score 20–34","Score 25–39","Score 40–54, consistent technique","Score 55–69","Score 70+ vs goalkeeper"]},
+  ]},
+];
+
+const DRILLS={
+  receiving:["Wall rebounds — 20 gentle traps focusing on stick angle","Partner feed varied pace — count score out of 10 each session","100 reverse traps — the single most effective reverse practice","Clock drill — partner feeds from different angles, you adjust body"],
+  passing:["Gate passing — 2 cones 1m apart at 10m, 20 passes counting score","Pressure pairs — third player closes after every receive","Distance laddering — start 10m, step back 5m each time you hit 70%+","Reverse only session — commit to reverse push going left for one full training"],
+  dribbling:["The 2 o'clock carry — keep ball at 2 o'clock in front of right foot","Head up challenge — partner holds fingers up, call the number while carrying","Slow then fast slalom — half pace then full pace, alternating","Narrow gate progression — start 80cm wide, reduce 5cm each week"],
+  shooting:["Corner targeting — call your corner before each shot","Head down drill — cone behind heel, if you can see it your head came up","Goalkeeper challenge — once above 50, add a goalkeeper","Varied position — 2 shots from 5 positions around D"],
+  elimination:["Slow motion V-drag — walk through vs passive defender","Cone defender — static cone, practise the step at different distances","1v1 corridor — 5m wide, 15m long, one job: beat the defender","Choice drill — passive defender points direction, match your move"],
+  defending:["Stick-on-stick drill — block tackle position held 5 seconds, coach checks","Shadow drill — follow attacker without tackling, focus on positioning","Jab and recover — after every jab, immediately recover to shape","Channel cones — mark forehand zone, force attacker into it"],
+  movement:["Lead and receive — time run so ball arrives as you reach target spot","Colour call drill — coach holds bibs, call colour before every receipt","Scan check in games — count how many times you look up before each touch","Passive defender lead — separate genuinely before receiving"],
+  set_pieces:["Cone zone target — mark 1.5m square, 20 injections counting landings","Paired corner practice — stopper gives feedback after each injection","20 full repetitions — inject, stop, strike, every session","Time pressure — add 2 defenders running from goal line"],
+};
+
+function grade(s){
+  if(s>=80)return{g:"A",l:"Excellent",c:GR};
+  if(s>=60)return{g:"B",l:"Good",c:"#3b82f6"};
+  if(s>=40)return{g:"C",l:"Developing",c:OR};
+  return{g:"D",l:"Foundation",c:RD};
+}
+function toStars(s){return Math.min(5,Math.max(0,Math.round((s/100)*5)));}
+
+function Stars({sc,sm}){
+  const n=toStars(sc||0);
+  return h("div",{style:{display:"flex",gap:2}},
+    [1,2,3,4,5].map(i=>h("span",{key:i,style:{fontSize:sm?12:17,color:i<=n?Y:"#ccc",textShadow:i<=n?"0 0 4px rgba(245,197,0,0.5)":"none"}},"★"))
+  );
+}
+
+function Bar({sc,color,hh}){
+  const height=hh||7;
+  return h("div",{style:{background:"#e5e7eb",borderRadius:height,height:height,overflow:"hidden",flex:1}},
+    h("div",{style:{height:"100%",width:sc+"%",background:"linear-gradient(90deg,"+color+"77,"+color+")",borderRadius:height,transition:"width 0.5s"}})
+  );
+}
+
+function Spark({id,hist}){
+  const data=(hist[id]||[]);
+  if(data.length<2)return h("span",{style:{color:TL,fontSize:12,fontStyle:"italic"}},"No history yet — record your first assessment to start tracking");
+  const W=150,H=36;
+  const pts=data.map(function(d,i){return ((i/(data.length-1))*W)+","+(H-((d.score/100))*H);}).join(" ");
+  return h("div",null,
+    h("svg",{width:W,height:H},
+      h("polyline",{points:pts,fill:"none",stroke:BL,strokeWidth:2,strokeLinejoin:"round"}),
+      data.map(function(d,i){var x=(i/(data.length-1))*W,y=H-((d.score/100))*H;return h("circle",{key:i,cx:x,cy:y,r:3,fill:BL});})
+    ),
+    h("div",{style:{fontSize:10,color:TL,marginTop:2}},data[0].date+" → "+data[data.length-1].date)
+  );
+}
+
+function TopBar({title,score,onBack,right}){
+  var g=grade(score||0);
+  return h("div",{style:{background:"linear-gradient(135deg,"+Y+","+YD+")",padding:"10px 14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"3px solid "+BL,position:"sticky",top:0,zIndex:100}},
+    onBack
+      ? h("button",{onClick:onBack,style:{background:BL,color:Y,borderRadius:8,padding:"5px 12px",fontWeight:"bold",fontSize:13}},"← Back")
+      : h("div",{style:{display:"flex",alignItems:"center",gap:8}},
+          h("div",{style:{width:36,height:36,borderRadius:"50%",background:BL,border:"2px solid "+WH,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:"bold",color:Y,fontSize:11}},"BHC"),
+          h("div",null,h("div",{style:{fontSize:7,fontWeight:"bold",color:BL,letterSpacing:2}},"BRAINTREE"),h("div",{style:{fontSize:8,fontWeight:"bold",color:BL,letterSpacing:2}},"HOCKEY CLUB"))
+        ),
+    h("div",{style:{fontWeight:"bold",fontSize:11,color:BL,letterSpacing:3,textTransform:"uppercase",textAlign:"center",flex:1,padding:"0 6px",lineHeight:1.2}},title),
+    score!==undefined
+      ? h("div",{style:{background:BL,borderRadius:8,padding:"4px 10px",textAlign:"center",minWidth:48}},
+          h("div",{style:{fontSize:20,fontWeight:"bold",color:g.c,lineHeight:1}},score),
+          h("div",{style:{fontSize:8,color:WH}},"/ 100")
+        )
+      : (right||h("div",{style:{width:48}}))
+  );
+}
+
+function Photo({player,compact}){
+  return h("div",{style:{height:compact?120:185,background:"linear-gradient(180deg,"+BD+","+BL+"88,transparent)",position:"relative",overflow:"hidden"}},
+    player.photo
+      ? h("img",{src:player.photo,alt:"",style:{width:"100%",height:"100%",objectFit:"cover",opacity:0.82}})
+      : h("div",{style:{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:6}},
+          h("span",{style:{fontSize:compact?32:48,opacity:0.35}},"🏑"),
+          !compact&&h("span",{style:{color:"rgba(255,255,255,0.3)",fontSize:11,letterSpacing:1}},"Add photo in settings ⚙️")
+        ),
+    h("div",{style:{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(135deg,"+Y+"ee,"+YD+"ee)",padding:compact?"6px 14px":"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",clipPath:"polygon(0 10px,100% 0,100% 100%,0 100%)"}},
+      h("div",null,
+        h("div",{style:{fontWeight:"bold",color:BL,fontSize:compact?14:19,letterSpacing:1,textTransform:"uppercase",lineHeight:1}},player.name||"Player"),
+        h("div",{style:{color:BD,fontSize:compact?9:11,letterSpacing:2,textTransform:"uppercase",marginTop:1}},player.position||"Midfielder")
+      ),
+      h("div",{style:{width:compact?32:44,height:compact?32:44,borderRadius:"50%",background:BL,border:"2px solid "+WH,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:"bold",color:Y,fontSize:compact?14:18}},player.squad||"7")
+    )
+  );
+}
+
+function BotNav({active,onNav,doRandom}){
+  var items=[{icon:"🏠",label:"Home",s:"home"},{icon:"🎲",label:"Random",s:"random"},{icon:"🎯",label:"Coach",s:"coach"},{icon:"⚙️",label:"Setup",s:"setup"}];
+  return h("div",{style:{position:"sticky",bottom:0,background:"linear-gradient(135deg,"+BL+","+BD+")",borderTop:"3px solid "+Y,display:"flex",padding:"8px 0",zIndex:200,marginTop:"auto"}},
+    items.map(function(x){return h("button",{key:x.s,onClick:x.s==="random"?doRandom:function(){onNav(x.s);},style:{flex:1,background:"transparent",color:active===x.s?Y:"rgba(255,255,255,0.55)",padding:"4px 0",fontSize:10,letterSpacing:1,fontWeight:"bold",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
+      h("span",{style:{fontSize:20}},x.icon),x.label
+    );})
+  );
+}
+
+function App(){
+  var s0=lsGet("bhc_scores")||{};
+  var h0=lsGet("bhc_hist")||{};
+  var p0=lsGet("bhc_player")||{name:"Dave Malthouse",position:"Midfielder",squad:"7",photo:null,headshot:null};
+
+  var sc=useState(s0),scores=sc[0],setScores=sc[1];
+  var hh=useState(h0),hist=hh[0],setHist=hh[1];
+  var pp=useState(p0),player=pp[0],setPlayer=pp[1];
+  var ss=useState("home"),screen=ss[0],setScreen=ss[1];
+  var aa=useState(null),selArea=aa[0],setSelArea=aa[1];
+  var sk0=useState(null),selSkill=sk0[0],setSelSkill=sk0[1];
+  var lf=useState(0),lvlFilter=lf[0],setLvlFilter=lf[1];
+  var ad=useState([]),assessData=ad[0],setAssessData=ad[1];
+  var rs=useState(null),randSkill=rs[0],setRandSkill=rs[1];
+  var tv=useState(""),timedVal=tv[0],setTimedVal=tv[1];
+  var cv=useState(""),countVal=cv[0],setCountVal=cv[1];
+  var lp=useState(Object.assign({},p0)),localPlayer=lp[0],setLocalPlayer=lp[1];
+  var photoRef=useRef(null);
+  var headRef=useRef(null);
+
+  function saveScore(id,sc2){
+    var d=new Date().toLocaleDateString("en-GB");
+    var ns=Object.assign({},scores);ns[id]=sc2;
+    var nh=Object.assign({},hist);
+    var arr=(nh[id]||[]).slice();arr.push({date:d,score:sc2});nh[id]=arr.slice(-10);
+    setScores(ns);setHist(nh);lsSet("bhc_scores",ns);lsSet("bhc_hist",nh);
+  }
+
+  function savePlayer(p2){setPlayer(p2);lsSet("bhc_player",p2);}
+
+  function nav(s,a,sk){
+    setScreen(s);setTimedVal("");setCountVal("");setAssessData([]);
+    if(s==="setup")setLocalPlayer(Object.assign({},player));
+    if(a!=null)setSelArea(a);
+    if(sk!=null)setSelSkill(sk);
+    var el=document.getElementById("root");if(el)el.scrollTop=0;
+  }
+
+  function areaAvg(area,lvl){
+    var skills=lvl?area.skills.filter(function(s){return s.level===lvl;}):area.skills;
+    if(!skills.length)return 0;
+    return Math.round(skills.map(function(s){return scores[s.id]||0;}).reduce(function(a,b){return a+b;},0)/skills.length);
+  }
+
+  function totalAvg(){
+    return Math.round(AREAS.map(function(a){return areaAvg(a,0);}).reduce(function(a,b){return a+b;},0)/AREAS.length);
+  }
+
+  function doRandom(){
+    var all=AREAS.reduce(function(acc,a){return acc.concat(a.skills);},[]);
+    var pool=all.filter(function(s){return scores[s.id]!==undefined;});
+    var src=pool.length>0?pool:all.filter(function(s){return s.level===1;});
+    var now=Date.now();
+    var w=src.map(function(s){
+      var hdata=hist[s.id];
+      var last=hdata&&hdata.length?new Date(hdata[hdata.length-1].date.split("/").reverse().join("-")).getTime():0;
+      return{skill:s,weight:Math.max((now-last)/86400000,1)};
+    });
+    var tot=w.reduce(function(s,x){return s+x.weight;},0);
+    var r=Math.random()*tot,picked=src[0];
+    for(var i=0;i<w.length;i++){r-=w[i].weight;if(r<=0){picked=w[i].skill;break;}}
+    setRandSkill(picked);nav("random");
+  }
+
+  function coachRecs(){
+    return AREAS.map(function(a){return Object.assign({},a,{avg:areaAvg(a,0)});}).sort(function(a,b){return a.avg-b.avg;}).slice(0,3).map(function(area){
+      return{area:area,weak:area.skills.filter(function(s){return (scores[s.id]||0)<60;}).slice(0,2),drills:(DRILLS[area.id]||[]).slice(0,3)};
+    });
+  }
+
+  function LvlToggle(){
+    return h("div",{style:{display:"flex",margin:"10px 14px 8px",borderRadius:10,overflow:"hidden",border:"2px solid "+BL}},
+      [["All",0],["L1",1],["L2",2],["L3",3]].map(function(pair){
+        var l=pair[0],v=pair[1];
+        return h("button",{key:v,onClick:function(){setLvlFilter(v);},style:{flex:1,padding:"7px 2px",fontSize:12,fontWeight:"bold",background:lvlFilter===v?BL:WH,color:lvlFilter===v?Y:BL,borderRight:v<3?"1px solid "+BL:"none"}},l);
+      })
+    );
+  }
+
+  // ════ HOME ════
+  if(screen==="home"){
+    var tot=totalAvg();var g=grade(tot);
+    return h("div",{style:{display:"flex",flexDirection:"column",minHeight:"100vh"}},
+      h("div",{className:"shimmer"}),
+      h(TopBar,{title:"SKILLS TRACKER",right:h("button",{onClick:function(){nav("setup");},style:{background:BL,color:Y,borderRadius:8,padding:"5px 10px",fontSize:17}},"⚙️")}),
+      h(Photo,{player:player,compact:false}),
+      h("div",{style:{background:"linear-gradient(135deg,"+BL+","+BD+")",margin:"0 14px",marginTop:-1,borderRadius:"0 0 16px 16px",padding:"12px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        h("div",null,h("div",{style:{color:Y,fontSize:9,letterSpacing:3,fontWeight:"bold",marginBottom:4}},"TOTAL HOCKEY SKILLS"),h(Stars,{sc:tot})),
+        h("div",{style:{textAlign:"center"}},h("div",{style:{fontSize:52,fontWeight:"bold",color:g.c,lineHeight:1,fontFamily:"Georgia,serif"}},tot),h("div",{style:{fontSize:9,color:"rgba(255,255,255,0.45)",letterSpacing:2}},"OUT OF 100")),
+        h("div",{style:{background:g.c,borderRadius:12,padding:"8px 12px",textAlign:"center",minWidth:50}},h("div",{style:{fontSize:26,fontWeight:"bold",color:WH,fontFamily:"Georgia,serif"}},g.g),h("div",{style:{fontSize:9,color:WH,letterSpacing:1}},g.l))
+      ),
+      h(LvlToggle),
+      h("div",{style:{padding:"0 14px 16px",flex:1}},
+        AREAS.map(function(area,idx){
+          var sc2=areaAvg(area,lvlFilter);var g2=grade(sc2);
+          return h("button",{key:area.id,onClick:function(){nav("area",area);},className:"fade",style:{width:"100%",background:WH,borderRadius:12,marginBottom:10,border:"2px solid "+area.color+"22",padding:"11px 13px",textAlign:"left",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"block",animationDelay:(idx*0.04)+"s"}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:10}},
+              h("div",{style:{width:42,height:42,borderRadius:10,background:"linear-gradient(135deg,"+area.color+"22,"+area.color+"44)",border:"2px solid "+area.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}},area.icon),
+              h("div",{style:{flex:1}},h("div",{style:{fontWeight:"bold",color:TX,fontSize:15,marginBottom:3}},area.name),h("div",{style:{color:TL,fontSize:11}},area.skills.filter(function(s){return lvlFilter===0||s.level===lvlFilter;}).length+" skills"+(lvlFilter>0?" · Level "+lvlFilter:""))),
+              h("div",{style:{display:"flex",alignItems:"center",gap:8,minWidth:90}},
+                h(Bar,{sc:sc2,color:area.color}),
+                h("div",{style:{width:42,height:42,borderRadius:8,background:sc2?g2.c:"#e5e7eb",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}},
+                  h("div",{style:{fontSize:17,fontWeight:"bold",color:sc2?WH:TL,lineHeight:1}},sc2||"—"),
+                  sc2>0&&h("div",{style:{fontSize:8,color:"rgba(255,255,255,0.85)"}},g2.g)
+                )
+              )
+            )
+          );
+        })
+      ),
+      h(BotNav,{active:"home",onNav:nav,doRandom:doRandom})
+    );
+  }
+
+  // ════ AREA ════
+  if(screen==="area"&&selArea){
+    var area=selArea;var asc=areaAvg(area,lvlFilter);
+    var lvls=[1,2,3].map(function(l){return{l:l,skills:area.skills.filter(function(s){return s.level===l;}),avg:areaAvg(area,l)};});
+    return h("div",{style:{display:"flex",flexDirection:"column",minHeight:"100vh"}},
+      h("div",{className:"shimmer"}),
+      h(TopBar,{title:area.name,score:asc,onBack:function(){nav("home");}}),
+      h(Photo,{player:player,compact:true}),
+      h("div",{style:{background:"linear-gradient(135deg,"+BL+","+BD+")",padding:"10px 14px",display:"flex",gap:8}},
+        lvls.map(function(x){var g2=grade(x.avg);return h("div",{key:x.l,style:{flex:1,background:"rgba(255,255,255,0.1)",borderRadius:10,padding:"8px 4px",textAlign:"center",border:"1px solid "+Y+"44"}},
+          h("div",{style:{color:Y,fontSize:9,letterSpacing:2,fontWeight:"bold"}},"LVL "+x.l),
+          h("div",{style:{fontSize:22,fontWeight:"bold",color:g2.c,fontFamily:"Georgia,serif"}},x.avg),
+          h("div",{style:{fontSize:8,color:"rgba(255,255,255,0.55)"}},g2.g)
+        );})
+      ),
+      h(LvlToggle),
+      h("div",{style:{padding:"0 14px 16px",flex:1}},
+        lvls.filter(function(x){return lvlFilter===0||x.l===lvlFilter;}).map(function(x){return h(Fragment,{key:x.l},
+          lvlFilter===0&&h("div",{style:{fontSize:10,fontWeight:"bold",letterSpacing:3,color:WH,background:"linear-gradient(90deg,"+area.color+","+area.color+"77)",padding:"5px 12px",borderRadius:6,marginBottom:8,marginTop:x.l>1?12:0,display:"inline-block"}},"LEVEL "+x.l+" — "+(x.l===1?"FOUNDATION":x.l===2?"DEVELOPMENT":"ADVANCED")),
+          x.skills.map(function(skill){var sc2=scores[skill.id]||0;var g2=grade(sc2);return h("button",{key:skill.id,onClick:function(){nav("skill",area,skill);},style:{width:"100%",background:WH,borderRadius:12,marginBottom:8,border:"2px solid "+area.color+"33",padding:"11px 13px",textAlign:"left",boxShadow:"0 1px 6px rgba(0,0,0,0.04)",display:"block"}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:10}},
+              h("div",{style:{flex:1}},h("div",{style:{fontWeight:"bold",color:TX,fontSize:14,marginBottom:4}},skill.name),h(Stars,{sc:sc2,sm:true})),
+              h("div",{style:{display:"flex",alignItems:"center",gap:8,minWidth:80}},
+                h(Bar,{sc:sc2,color:area.color,hh:5}),
+                h("div",{style:{width:40,height:40,borderRadius:8,background:sc2?g2.c:"#e5e7eb",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}},
+                  h("div",{style:{fontSize:16,fontWeight:"bold",color:sc2?WH:TL,lineHeight:1}},sc2||"—"),
+                  sc2>0&&h("div",{style:{fontSize:8,color:"rgba(255,255,255,0.85)"}},g2.g)
+                )
+              )
+            )
+          );})
+        );})
+      ),
+      h(BotNav,{active:"",onNav:nav,doRandom:doRandom})
+    );
+  }
+
+  // ════ SKILL DETAIL ════
+  if(screen==="skill"&&selSkill&&selArea){
+    var sk=selSkill;var skArea=selArea;var skSc=scores[sk.id]||0;
+    return h("div",{style:{display:"flex",flexDirection:"column",minHeight:"100vh"}},
+      h("div",{className:"shimmer"}),
+      h(TopBar,{title:sk.name,score:skSc,onBack:function(){nav("area",skArea);}}),
+      h("div",{style:{background:"linear-gradient(135deg,"+BL+","+BD+")",padding:"8px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        h("div",{style:{display:"flex",gap:8}},
+          h("span",{style:{background:skArea.color,color:WH,borderRadius:6,padding:"2px 10px",fontSize:11,fontWeight:"bold"}},skArea.icon+" "+skArea.name),
+          h("span",{style:{background:"rgba(255,255,255,0.14)",color:Y,borderRadius:6,padding:"2px 10px",fontSize:11,fontWeight:"bold"}},"Level "+sk.level)
+        ),
+        h(Stars,{sc:skSc})
+      ),
+      h("div",{style:{padding:"14px 14px 20px",flex:1}},
+        h("div",{style:{background:BL+"10",border:"2px solid "+BL+"30",borderRadius:12,padding:14,marginBottom:12}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:BL,letterSpacing:2,marginBottom:6}},"WHY IT MATTERS"),
+          h("div",{style:{fontSize:14,color:TX,lineHeight:1.65}},sk.why)
+        ),
+        h("div",{style:{background:Y+"20",border:"2px solid "+Y,borderRadius:12,padding:14,marginBottom:12}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:YD,letterSpacing:2,marginBottom:6}},"THE TEST"),
+          h("div",{style:{fontSize:14,color:TX,lineHeight:1.65}},sk.test)
+        ),
+        h("div",{style:{background:WH,border:"2px solid #e5e7eb",borderRadius:12,padding:14,marginBottom:12}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:TX,letterSpacing:2,marginBottom:10}},"SCORING CRITERIA"),
+          sk.criteria.map(function(c,i){return h("div",{key:i,style:{display:"flex",alignItems:"flex-start",gap:8,marginBottom:8}},
+            h("div",{style:{display:"flex",gap:1,flexShrink:0,paddingTop:2}},[1,2,3,4,5].map(function(j){return h("span",{key:j,style:{fontSize:11,color:j<=i+1?Y:"#ddd"}},"★");})),
+            h("div",{style:{fontSize:13,color:TX,lineHeight:1.45}},c)
+          );})
+        ),
+        h("div",{style:{background:WH,border:"2px solid #e5e7eb",borderRadius:12,padding:14,marginBottom:80}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:TX,letterSpacing:2,marginBottom:10}},"PROGRESS HISTORY"),
+          h(Spark,{id:sk.id,hist:hist}),
+          (hist[sk.id]||[]).length>0&&h("div",{style:{marginTop:10}},
+            (hist[sk.id]||[]).slice().reverse().slice(0,6).map(function(entry,i){return h("div",{key:i,style:{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #f3f4f6",fontSize:13}},
+              h("span",{style:{color:TL}},entry.date),
+              h("span",{style:{fontWeight:"bold",color:grade(entry.score).c}},entry.score+"/100")
+            );})
+          )
+        )
+      ),
+      h("div",{style:{position:"sticky",bottom:0,padding:"12px 14px 16px",background:"rgba(248,249,255,0.97)",borderTop:"2px solid "+Y,zIndex:200}},
+        h("button",{onClick:function(){nav("assess",skArea,sk);},style:{width:"100%",padding:"14px 0",background:"linear-gradient(135deg,"+BL+","+BD+")",color:Y,borderRadius:14,fontWeight:"bold",fontSize:16,letterSpacing:2,fontFamily:"Georgia,serif",boxShadow:"0 4px 14px rgba(0,48,135,0.28)"}},"📋 RECORD ASSESSMENT")
+      )
+    );
+  }
+
+  // ════ ASSESSMENT ════
+  if(screen==="assess"&&selSkill){
+    var ask=selSkill;var aArea=selArea;
+    var isTimed=ask.testType==="timed";
+    var isCount=ask.testType==="count";
+    var isCoached=ask.testType==="coached";
+    var atts=ask.attempts||10;
+    var done=(isTimed||isCount)?assessData.length>=1:assessData.length>=atts;
+    var outcomes=ask.outcomes||ask.coachScale||[];
+
+    function getTimedScore(v){var n=parseFloat(v);if(isNaN(n))return 0;var bands=ask.timeBands||[];for(var i=0;i<bands.length;i++)if(n<=bands[i].max)return bands[i].score;return 20;}
+    function getCountScore(v){var n=parseInt(v);if(isNaN(n))return 0;var bands=(ask.countBands||[]).slice().sort(function(a,b){return a.max-b.max;});for(var i=0;i<bands.length;i++)if(n<=bands[i].max)return bands[i].score;return 20;}
+
+    function rawScore(){
+      if(isTimed||isCount)return assessData[0]||0;
+      var maxPts=atts*((outcomes[0]&&outcomes[0].pts)||10);
+      return Math.min(100,Math.round((assessData.reduce(function(s,p){return s+p;},0)/maxPts)*100));
+    }
+    var finalScore=rawScore();
+
+    return h("div",{style:{display:"flex",flexDirection:"column",minHeight:"100vh"}},
+      h("div",{className:"shimmer"}),
+      h(TopBar,{title:"Assessment",score:done?finalScore:undefined,onBack:function(){nav("skill",aArea,ask);}}),
+      h("div",{style:{background:"linear-gradient(135deg,"+BL+","+BD+")",padding:"8px 14px",display:"flex",alignItems:"center",gap:10}},
+        h("span",{style:{fontSize:20}},aArea&&aArea.icon),
+        h("div",{style:{flex:1}},h("div",{style:{color:Y,fontSize:13,fontWeight:"bold"}},ask.name),h("div",{style:{color:"rgba(255,255,255,0.55)",fontSize:11}},(aArea&&aArea.name)+" · Level "+ask.level)),
+        !done&&!isTimed&&!isCount&&h("div",{style:{background:"rgba(255,255,255,0.14)",borderRadius:8,padding:"4px 12px",textAlign:"center"}},
+          h("div",{style:{color:Y,fontWeight:"bold",fontSize:18,lineHeight:1}},assessData.length+"/"+atts),
+          h("div",{style:{color:"rgba(255,255,255,0.55)",fontSize:10}},"attempts")
+        )
+      ),
+      h("div",{style:{padding:"14px 14px 40px",flex:1}},
+        h("div",{style:{background:Y+"20",border:"2px solid "+Y,borderRadius:12,padding:12,marginBottom:14}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:YD,letterSpacing:2,marginBottom:4}},"THE TEST"),
+          h("div",{style:{fontSize:13,color:TX,lineHeight:1.55}},ask.test)
+        ),
+        isTimed&&!done&&h("div",{style:{textAlign:"center"}},
+          h("div",{style:{fontSize:15,fontWeight:"bold",color:TX,marginBottom:8}},ask.timeLabel),
+          h("input",{type:"number",step:"0.1",placeholder:"e.g. 11.4",value:timedVal,onChange:function(e){setTimedVal(e.target.value);},style:{fontSize:34,fontWeight:"bold",textAlign:"center",fontFamily:"Georgia,serif",border:"3px solid "+BL,borderRadius:12,padding:"12px 16px",color:BL,width:180,background:WH}}),
+          timedVal&&h("div",{style:{marginTop:8,color:TL,fontSize:14}},"→ Score: ",h("strong",{style:{color:BL}},getTimedScore(timedVal))," / 100"),
+          h("div",{style:{margin:"14px 0",textAlign:"left"}},(ask.timeBands||[]).map(function(b,i){return h("div",{key:i,style:{fontSize:12,color:TL,padding:"3px 0"}},h("span",{style:{color:BL,fontWeight:"bold"}},b.score)," pts — ",b.label);})),
+          h("button",{onClick:function(){if(timedVal)setAssessData([getTimedScore(timedVal)]);},style:{padding:"14px 40px",background:"linear-gradient(135deg,"+BL+","+BD+")",color:Y,borderRadius:12,fontWeight:"bold",fontSize:15,letterSpacing:2}},"RECORD TIME")
+        ),
+        isCount&&!done&&h("div",{style:{textAlign:"center"}},
+          h("div",{style:{fontSize:14,fontWeight:"bold",color:TX,marginBottom:12,lineHeight:1.4}},ask.countLabel),
+          h("input",{type:"number",min:"0",placeholder:"0",value:countVal,onChange:function(e){setCountVal(e.target.value);},style:{fontSize:42,fontWeight:"bold",textAlign:"center",fontFamily:"Georgia,serif",border:"3px solid "+BL,borderRadius:12,padding:"12px 16px",color:BL,width:130,background:WH}}),
+          countVal!==""&&h("div",{style:{marginTop:8,color:TL,fontSize:14}},"→ Score: ",h("strong",{style:{color:BL}},getCountScore(countVal))," / 100"),
+          h("div",{style:{margin:"14px 0",textAlign:"left"}},(ask.countBands||[]).map(function(b,i){return h("div",{key:i,style:{fontSize:12,color:TL,padding:"3px 0"}},h("span",{style:{color:BL,fontWeight:"bold"}},b.score)," pts — ",b.label);})),
+          h("button",{onClick:function(){if(countVal!=="")setAssessData([getCountScore(countVal)]);},style:{padding:"14px 40px",background:"linear-gradient(135deg,"+BL+","+BD+")",color:Y,borderRadius:12,fontWeight:"bold",fontSize:15,letterSpacing:2}},"RECORD")
+        ),
+        (ask.testType==="outcomes"||ask.testType==="shooting"||isCoached)&&!done&&h("div",null,
+          h("div",{style:{display:"flex",gap:4,justifyContent:"center",marginBottom:14,flexWrap:"wrap"}},
+            Array.from({length:atts}).map(function(_,i){return h("div",{key:i,style:{width:26,height:26,borderRadius:"50%",background:i<assessData.length?BL:i===assessData.length?Y:"#e5e7eb",border:i===assessData.length?"2px solid "+BL:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:"bold",color:i<assessData.length?WH:i===assessData.length?BL:TL}},i+1);})
+          ),
+          h("div",{style:{textAlign:"center",marginBottom:12,fontWeight:"bold",fontSize:17,color:TX}},"Attempt "+(assessData.length+1)+" of "+atts),
+          h("div",{style:{display:"flex",flexDirection:"column",gap:10}},
+            outcomes.map(function(o,i){return h("button",{key:i,onClick:function(){setAssessData(function(d){return d.concat([o.pts]);});},style:{padding:"13px 14px",borderRadius:12,textAlign:"left",background:WH,border:"2px solid "+o.color,display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 6px rgba(0,0,0,0.04)"}},
+              o.icon&&h("span",{style:{fontSize:22}},o.icon),
+              h("div",{style:{flex:1}},h("div",{style:{fontWeight:"bold",color:TX,fontSize:14}},o.label),h("div",{style:{color:o.color,fontSize:12,fontWeight:"bold",marginTop:2}},"+"+o.pts+" pts")),
+              h("div",{style:{width:36,height:36,borderRadius:"50%",background:o.color,display:"flex",alignItems:"center",justifyContent:"center",color:WH,fontWeight:"bold",fontSize:14,flexShrink:0}},o.pts)
+            );})
+          ),
+          assessData.length>0&&h("div",{style:{marginTop:14,padding:12,background:BL+"10",borderRadius:10,textAlign:"center"}},
+            h("div",{style:{fontSize:11,color:TL,letterSpacing:2}},"RUNNING SCORE"),
+            h("div",{style:{fontSize:32,fontWeight:"bold",color:BL,fontFamily:"Georgia,serif"}},finalScore)
+          ),
+          assessData.length>0&&h("button",{onClick:function(){setAssessData(function(d){return d.slice(0,-1);});},style:{marginTop:10,width:"100%",padding:"10px",background:"transparent",color:TL,fontSize:13,borderRadius:8,border:"1px solid #e5e7eb"}},"↩ Undo last attempt")
+        ),
+        done&&h("div",{style:{textAlign:"center",animation:"fadeUp 0.4s ease"}},
+          h("div",{style:{fontSize:56,marginBottom:8}},"🎯"),
+          h("div",{style:{fontSize:12,color:TL,letterSpacing:2,marginBottom:8}},"ASSESSMENT COMPLETE"),
+          h("div",{style:{fontSize:78,fontWeight:"bold",color:grade(finalScore).c,fontFamily:"Georgia,serif",lineHeight:1}},finalScore),
+          h("div",{style:{fontSize:13,color:TL,marginBottom:6}},"out of 100"),
+          h(Stars,{sc:finalScore}),
+          h("div",{style:{margin:"14px 0",padding:14,background:WH,borderRadius:12,border:"2px solid #e5e7eb",textAlign:"left"}},
+            h("div",{style:{fontSize:10,fontWeight:"bold",color:TL,letterSpacing:2,marginBottom:8}},"YOUR STANDARD"),
+            h("div",{style:{fontSize:14,color:TX}},ask.criteria[Math.max(0,toStars(finalScore)-1)])
+          ),
+          scores[ask.id]>0&&h("div",{style:{padding:12,background:finalScore>scores[ask.id]?GR+"11":RD+"11",borderRadius:10,marginBottom:14}},
+            h("div",{style:{fontSize:13,color:finalScore>scores[ask.id]?GR:RD}},(finalScore>scores[ask.id]?"▲ ":"▼ ")+Math.abs(finalScore-scores[ask.id])+" points "+(finalScore>scores[ask.id]?"improvement":"drop")+" from last test ("+scores[ask.id]+")")
+          ),
+          h("button",{onClick:function(){saveScore(ask.id,finalScore);nav("skill",aArea,ask);},style:{width:"100%",padding:"15px 0",background:"linear-gradient(135deg,"+BL+","+BD+")",color:Y,borderRadius:14,fontWeight:"bold",fontSize:16,letterSpacing:2,fontFamily:"Georgia,serif",boxShadow:"0 4px 14px rgba(0,48,135,0.28)",marginBottom:10}},"✅ SAVE SCORE"),
+          h("button",{onClick:function(){setAssessData([]);},style:{width:"100%",padding:"12px 0",background:"transparent",color:BL,border:"2px solid "+BL,borderRadius:14,fontWeight:"bold",fontSize:14}},"↩ Redo Assessment")
+        )
+      )
+    );
+  }
+
+  // ════ COACH ════
+  if(screen==="coach"){
+    var recs=coachRecs();
+    return h("div",{style:{display:"flex",flexDirection:"column",minHeight:"100vh"}},
+      h("div",{className:"shimmer"}),
+      h(TopBar,{title:"COACH SECTION",right:h("div",{style:{width:48}})}),
+      h("div",{style:{background:"linear-gradient(135deg,"+BL+","+BD+")",padding:"20px 14px",textAlign:"center"}},
+        h("div",{style:{fontSize:42,marginBottom:8}},"🎯"),
+        h("div",{style:{color:Y,fontSize:13,fontWeight:"bold",letterSpacing:3}},"DEVELOPMENT PRIORITIES"),
+        h("div",{style:{color:"rgba(255,255,255,0.55)",fontSize:12,marginTop:4}},"Based on your scores — focus here for maximum impact")
+      ),
+      h("div",{style:{padding:"14px 14px 16px",flex:1}},
+        recs.map(function(rec,idx){
+          var cArea=rec.area;var cSc=areaAvg(cArea,0);var cG=grade(cSc);
+          return h("div",{key:cArea.id,style:{background:WH,borderRadius:16,marginBottom:14,border:"2px solid "+cArea.color+"44",overflow:"hidden",boxShadow:"0 2px 10px rgba(0,0,0,0.06)"}},
+            h("div",{style:{background:"linear-gradient(135deg,"+cArea.color+","+cArea.color+"88)",padding:"12px 14px",display:"flex",alignItems:"center",gap:10}},
+              h("span",{style:{fontSize:26}},cArea.icon),
+              h("div",{style:{flex:1}},h("div",{style:{color:WH,fontWeight:"bold",fontSize:15}},cArea.name),h("div",{style:{color:"rgba(255,255,255,0.75)",fontSize:11}},"Score: "+cSc+"/100 · Grade "+cG.g)),
+              h("div",{style:{background:idx===0?RD:idx===1?OR:Y,borderRadius:8,padding:"4px 10px",color:WH,fontSize:10,fontWeight:"bold",letterSpacing:1}},"PRIORITY "+(idx+1))
+            ),
+            h("div",{style:{padding:14}},
+              rec.weak.length>0&&h("div",{style:{marginBottom:12}},
+                h("div",{style:{fontSize:10,fontWeight:"bold",color:TL,letterSpacing:2,marginBottom:8}},"FOCUS SKILLS"),
+                rec.weak.map(function(skill){return h("div",{key:skill.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8}},
+                  h("div",{style:{flex:1}},h("div",{style:{fontSize:13,fontWeight:"bold",color:TX}},skill.name),h(Stars,{sc:scores[skill.id]||0,sm:true})),
+                  h("button",{onClick:function(){nav("assess",cArea,skill);},style:{background:BL,color:Y,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:"bold"}},"TEST NOW")
+                );})
+              ),
+              h("div",null,
+                h("div",{style:{fontSize:10,fontWeight:"bold",color:TL,letterSpacing:2,marginBottom:8}},"DRILLS"),
+                rec.drills.map(function(d,i){return h("div",{key:i,style:{fontSize:13,color:TX,padding:"5px 0 5px 12px",borderBottom:i<rec.drills.length-1?"1px solid #f3f4f6":"none",position:"relative"}},h("span",{style:{position:"absolute",left:0,color:cArea.color,fontWeight:"bold"}},"›"),d);})
+              ),
+              h("button",{onClick:function(){nav("area",cArea);},style:{marginTop:12,width:"100%",padding:"10px",background:cArea.color+"11",border:"1px solid "+cArea.color,borderRadius:10,color:cArea.color,fontWeight:"bold",fontSize:13}},"View all "+cArea.name+" skills →")
+            )
+          );
+        })
+      ),
+      h(BotNav,{active:"coach",onNav:nav,doRandom:doRandom})
+    );
+  }
+
+  // ════ RANDOM ════
+  if(screen==="random"){
+    var rsk=randSkill||AREAS[0].skills[0];
+    var rArea=AREAS.filter(function(a){return a.skills.some(function(s){return s.id===rsk.id;});})[0]||AREAS[0];
+    return h("div",{style:{display:"flex",flexDirection:"column",minHeight:"100vh"}},
+      h("div",{className:"shimmer"}),
+      h(TopBar,{title:"RANDOM CHECK",right:h("button",{onClick:doRandom,style:{background:BL,color:Y,borderRadius:8,padding:"5px 10px",fontSize:16}},"🎲")}),
+      h("div",{style:{background:"linear-gradient(135deg,"+BL+","+BD+")",padding:"22px 14px",textAlign:"center"}},
+        h("div",{style:{fontSize:42,marginBottom:8}},"🎲"),
+        h("div",{style:{color:"rgba(255,255,255,0.55)",fontSize:10,letterSpacing:3,marginBottom:4}},"TODAY'S SKILL CHECK"),
+        h("div",{style:{color:Y,fontSize:20,fontWeight:"bold",letterSpacing:1}},rsk.name),
+        h("div",{style:{color:"rgba(255,255,255,0.55)",fontSize:12,marginTop:4}},rArea.icon+" "+rArea.name+" · Level "+rsk.level)
+      ),
+      h("div",{style:{padding:"14px 14px 16px",flex:1}},
+        h("div",{style:{background:Y+"20",border:"2px solid "+Y,borderRadius:12,padding:14,marginBottom:14}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:YD,letterSpacing:2,marginBottom:6}},"THE TEST"),
+          h("div",{style:{fontSize:14,color:TX,lineHeight:1.65}},rsk.test)
+        ),
+        h("div",{style:{background:WH,border:"2px solid #e5e7eb",borderRadius:12,padding:14,marginBottom:14}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:TX,letterSpacing:2,marginBottom:10}},"SCORING CRITERIA"),
+          rsk.criteria.map(function(c,i){return h("div",{key:i,style:{display:"flex",alignItems:"flex-start",gap:8,marginBottom:8}},
+            h("div",{style:{display:"flex",gap:1,flexShrink:0,paddingTop:2}},[1,2,3,4,5].map(function(j){return h("span",{key:j,style:{fontSize:11,color:j<=i+1?Y:"#ddd"}},"★");})),
+            h("div",{style:{fontSize:13,color:TX,lineHeight:1.4}},c)
+          );})
+        ),
+        scores[rsk.id]>0&&h("div",{style:{padding:12,background:BL+"10",borderRadius:10,marginBottom:14,textAlign:"center"}},
+          h("div",{style:{fontSize:11,color:TL,letterSpacing:2}},"YOUR LAST SCORE"),
+          h("div",{style:{fontSize:36,fontWeight:"bold",color:BL,fontFamily:"Georgia,serif"}},scores[rsk.id]),
+          h(Stars,{sc:scores[rsk.id]})
+        ),
+        h("button",{onClick:function(){nav("assess",rArea,rsk);},style:{width:"100%",padding:"15px 0",background:"linear-gradient(135deg,"+BL+","+BD+")",color:Y,borderRadius:14,fontWeight:"bold",fontSize:16,letterSpacing:2,fontFamily:"Georgia,serif",boxShadow:"0 4px 14px rgba(0,48,135,0.28)",marginBottom:10}},"📋 START ASSESSMENT"),
+        h("button",{onClick:doRandom,style:{width:"100%",padding:"12px 0",background:"transparent",color:BL,border:"2px solid "+BL,borderRadius:14,fontWeight:"bold",fontSize:14}},"🎲 Pick a Different Skill")
+      ),
+      h(BotNav,{active:"random",onNav:nav,doRandom:doRandom})
+    );
+  }
+
+  // ════ SETUP ════
+  if(screen==="setup"){
+    function handlePhoto(e,type){
+      var file=e.target.files[0];if(!file)return;
+      var reader=new FileReader();
+      reader.onload=function(ev){setLocalPlayer(function(p){var n=Object.assign({},p);n[type]=ev.target.result;return n;});};
+      reader.readAsDataURL(file);
+    }
+    return h("div",{style:{display:"flex",flexDirection:"column",minHeight:"100vh"}},
+      h("div",{className:"shimmer"}),
+      h(TopBar,{title:"PLAYER SETUP",onBack:function(){nav("home");},right:h("button",{onClick:function(){savePlayer(localPlayer);nav("home");},style:{background:BL,color:Y,borderRadius:8,padding:"5px 12px",fontWeight:"bold",fontSize:13}},"Save ✓")}),
+      h("div",{style:{background:"linear-gradient(135deg,"+BL+","+BD+")",padding:"16px 14px",display:"flex",alignItems:"center",gap:14}},
+        h("div",{style:{width:66,height:66,borderRadius:"50%",border:"3px solid "+Y,overflow:"hidden",background:BM,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
+          localPlayer.headshot?h("img",{src:localPlayer.headshot,alt:"",style:{width:"100%",height:"100%",objectFit:"cover"}}):h("span",{style:{fontSize:30}},"👤")
+        ),
+        h("div",null,
+          h("div",{style:{color:Y,fontSize:20,fontWeight:"bold",letterSpacing:1}},localPlayer.name||"Your Name"),
+          h("div",{style:{color:"rgba(255,255,255,0.65)",fontSize:13}},(localPlayer.position||"Midfielder")+" · #"+(localPlayer.squad||"7"))
+        )
+      ),
+      h("div",{style:{padding:"14px 14px 90px",flex:1}},
+        ["name","squad"].map(function(key){
+          var label=key==="name"?"PLAYER NAME":"SQUAD NUMBER";
+          var placeholder=key==="name"?"Full name":"e.g. 7";
+          var type=key==="squad"?"number":"text";
+          return h("div",{key:key,style:{marginBottom:14}},
+            h("div",{style:{fontSize:10,fontWeight:"bold",color:TL,letterSpacing:2,marginBottom:6}},label),
+            h("input",{type:type,value:localPlayer[key]||"",onChange:function(e){var v=e.target.value;setLocalPlayer(function(p){var n=Object.assign({},p);n[key]=v;return n;});},placeholder:placeholder,style:{width:"100%",padding:"12px 14px",fontSize:16,border:"2px solid "+BL+"30",borderRadius:10,color:TX,background:WH}})
+          );
+        }),
+        h("div",{style:{marginBottom:14}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:TL,letterSpacing:2,marginBottom:8}},"POSITION"),
+          h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+            ["Goalkeeper","Defender","Midfielder","Forward"].map(function(pos){
+              return h("button",{key:pos,onClick:function(){setLocalPlayer(function(p){return Object.assign({},p,{position:pos});});},style:{padding:"8px 14px",borderRadius:8,fontSize:13,fontWeight:"bold",background:localPlayer.position===pos?BL:WH,color:localPlayer.position===pos?Y:BL,border:"2px solid "+BL,fontFamily:"Georgia,serif"}},pos);
+            })
+          )
+        ),
+        h("div",{style:{marginBottom:14}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:TL,letterSpacing:2,marginBottom:8}},"ACTION PHOTO (card background)"),
+          h("input",{ref:photoRef,type:"file",accept:"image/*",onChange:function(e){handlePhoto(e,"photo");},style:{display:"none"}}),
+          h("button",{onClick:function(){photoRef.current&&photoRef.current.click();},style:{width:"100%",padding:12,borderRadius:10,fontSize:14,fontWeight:"bold",background:localPlayer.photo?GR+"18":WH,border:"2px dashed "+(localPlayer.photo?GR:BL),color:localPlayer.photo?GR:BL,fontFamily:"Georgia,serif"}},localPlayer.photo?"✅ Action photo uploaded — tap to change":"📷 Upload action photo"),
+          localPlayer.photo&&h("img",{src:localPlayer.photo,alt:"",style:{width:"100%",height:90,objectFit:"cover",borderRadius:10,marginTop:8}})
+        ),
+        h("div",{style:{marginBottom:20}},
+          h("div",{style:{fontSize:10,fontWeight:"bold",color:TL,letterSpacing:2,marginBottom:8}},"HEADSHOT (profile circle)"),
+          h("input",{ref:headRef,type:"file",accept:"image/*",onChange:function(e){handlePhoto(e,"headshot");},style:{display:"none"}}),
+          h("button",{onClick:function(){headRef.current&&headRef.current.click();},style:{width:"100%",padding:12,borderRadius:10,fontSize:14,fontWeight:"bold",background:localPlayer.headshot?GR+"18":WH,border:"2px dashed "+(localPlayer.headshot?GR:BL),color:localPlayer.headshot?GR:BL,fontFamily:"Georgia,serif"}},localPlayer.headshot?"✅ Headshot uploaded — tap to change":"🤳 Upload headshot")
+        ),
+        h("button",{onClick:function(){savePlayer(localPlayer);nav("home");},style:{width:"100%",padding:"15px 0",background:"linear-gradient(135deg,"+BL+","+BD+")",color:Y,borderRadius:14,fontWeight:"bold",fontSize:16,letterSpacing:2,fontFamily:"Georgia,serif",boxShadow:"0 4px 14px rgba(0,48,135,0.28)"}},"✅ SAVE PROFILE")
+      ),
+      h(BotNav,{active:"setup",onNav:nav,doRandom:doRandom})
+    );
+  }
+
+  return null;
+}
+
+var root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(h(App));
+</script>
+</body>
+</html>

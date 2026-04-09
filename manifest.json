@@ -1,0 +1,25 @@
+{
+  "name": "BHC Skills Tracker",
+  "short_name": "BHC Skills",
+  "description": "Braintree Hockey Club Player Skills Development Tracker",
+  "start_url": "https://dmalthouse.github.io/bhc-skills-app/",
+  "scope": "https://dmalthouse.github.io/bhc-skills-app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#003087",
+  "theme_color": "#F5C500",
+  "icons": [
+    {
+      "src": "https://dmalthouse.github.io/bhc-skills-app/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://dmalthouse.github.io/bhc-skills-app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
